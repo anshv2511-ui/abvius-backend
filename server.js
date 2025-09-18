@@ -10,6 +10,11 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
+// Simple health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime(), timestamp: Date.now() });
+});
+
 // POST /contact endpoint
 app.post('/contact', async (req, res) => {
   const { name, email, phone, businessType, message } = req.body;
@@ -37,7 +42,8 @@ app.post('/contact', async (req, res) => {
     await transporter.sendMail(mailOptions);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to send email' });
+    console.error('Email send failed:', err);
+    res.status(500).json({ error: 'Failed to send email', detail: err.message });
   }
 });
 
