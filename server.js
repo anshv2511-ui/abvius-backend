@@ -61,7 +61,7 @@ app.post('/contact', async (req, res) => {
   // Try each SMTP config until one works
   for (let i = 0; i < smtpConfigs.length; i++) {
     try {
-      const transporter = nodemailer.createTransporter(smtpConfigs[i]);
+      const transporter = nodemailer.createTransport(smtpConfigs[i]);
       await transporter.sendMail(mailOptions);
       console.log(`Email sent successfully using config ${i + 1}`);
       return res.json({ success: true });
