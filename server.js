@@ -10,6 +10,7 @@ const PORT = process.env.PORT || 5000;
 
 // Initialize Resend if API key is available
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+console.log('Resend availability:', resend ? '✅ Available' : '❌ No API key set');
 
 app.use(cors());
 app.use(express.json());
@@ -25,10 +26,10 @@ app.post('/contact', async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  // If Resend is available and we're likely on cloud hosting, try it first
-  if (resend && process.env.NODE_ENV === 'production') {
+  // If Resend is available, try it first (better for cloud hosting)
+  if (resend) {
     try {
-      console.log('Trying Resend first (production environment)...');
+      console.log('Trying Resend first (cloud-optimized)...');
       const result = await resend.emails.send({
         from: 'onboarding@resend.dev',
         to: process.env.EMAIL_USER,
@@ -140,7 +141,7 @@ app.post('/contact', async (req, res) => {
         // All SMTP configs failed, try Resend as fallback
         if (resend) {
           try {
-            console.log('Attempting Resend fallback...');
+            console.log('🔄 All SMTP failed, trying Resend fallback...');
             const result = await resend.emails.send({
               from: 'onboarding@resend.dev', // Default Resend sender
               to: process.env.EMAIL_USER,
@@ -157,24 +158,30 @@ app.post('/contact', async (req, res) => {
               `
             });
             
-            console.log('Email sent via Resend:', result);
+            console.log('✅ Email sent via Resend fallback:', result);
             return res.json({ 
               success: true, 
               message: 'Email sent successfully via Resend!',
               provider: 'resend'
             });
           } catch (resendErr) {
-            console.error('Resend also failed:', resendErr);
+            console.error('❌ Resend fallback also failed:', resendErr.message);
           }
+        } else {
+          console.log('⚠️ No Resend API key available for fallback');
         }
         
         // All methods failed
-        console.error('All email methods failed');
+        console.error('💥 All email methods exhausted');
         return res.status(500).json({ 
           success: false,
           error: 'Failed to send email', 
-          detail: 'Both SMTP and Resend failed. Please set up a cloud email service.',
-          suggestion: 'Get a free Resend API key from resend.com and add RESEND_API_KEY to your environment variables.'
+          detail: resend ? 
+            'Both SMTP and Resend failed on cloud hosting.' : 
+            'SMTP failed and no Resend API key configured.',
+          suggestion: resend ? 
+            'Try a different cloud email service or check your credentials.' :
+            '🚀 Quick fix: Get a free Resend API key from resend.com and add RESEND_API_KEY to your environment variables.'
         });
       }
     }
