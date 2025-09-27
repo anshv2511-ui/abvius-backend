@@ -25,6 +25,37 @@ app.post('/contact', async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
+  // If Resend is available and we're likely on cloud hosting, try it first
+  if (resend && process.env.NODE_ENV === 'production') {
+    try {
+      console.log('Trying Resend first (production environment)...');
+      const result = await resend.emails.send({
+        from: 'onboarding@resend.dev',
+        to: process.env.EMAIL_USER,
+        subject: 'New Project Enquiry from Abvius Portfolio',
+        text: `Name: ${name}\nEmail: ${email}\nPhone: ${phone}\nBusiness Type: ${businessType}\n\nMessage:\n${message}`,
+        html: `
+          <h3>New Project Enquiry</h3>
+          <p><strong>Name:</strong> ${name}</p>
+          <p><strong>Email:</strong> ${email}</p>
+          <p><strong>Phone:</strong> ${phone}</p>
+          <p><strong>Business Type:</strong> ${businessType}</p>
+          <h4>Message:</h4>
+          <p>${message.replace(/\n/g, '<br>')}</p>
+        `
+      });
+      
+      console.log('Email sent via Resend:', result);
+      return res.json({ 
+        success: true, 
+        message: 'Email sent successfully via Resend!',
+        provider: 'resend'
+      });
+    } catch (resendErr) {
+      console.log('Resend failed, falling back to SMTP:', resendErr.message);
+    }
+  }
+
   // Try multiple SMTP configurations for better cloud compatibility
   const smtpConfigs = [
     {
@@ -35,7 +66,10 @@ app.post('/contact', async (req, res) => {
       },
       tls: {
         rejectUnauthorized: false
-      }
+      },
+      connectionTimeout: 10000, // 10 seconds
+      greetingTimeout: 10000,
+      socketTimeout: 10000
     },
     {
       host: 'smtp.gmail.com',
@@ -47,7 +81,10 @@ app.post('/contact', async (req, res) => {
       },
       tls: {
         rejectUnauthorized: false
-      }
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000
     },
     {
       host: 'smtp.gmail.com',
@@ -59,7 +96,10 @@ app.post('/contact', async (req, res) => {
       },
       tls: {
         rejectUnauthorized: false
-      }
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000
     }
   ];
 
@@ -81,11 +121,13 @@ app.post('/contact', async (req, res) => {
       
       const transporter = nodemailer.createTransport(smtpConfigs[i]);
       
-      // Verify connection before sending
-      await transporter.verify();
-      console.log(`SMTP config ${i + 1} verified successfully`);
+      // Skip verification and try to send directly with timeout
+      const sendPromise = transporter.sendMail(mailOptions);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout after 15 seconds')), 15000)
+      );
       
-      await transporter.sendMail(mailOptions);
+      await Promise.race([sendPromise, timeoutPromise]);
       console.log(`Email sent successfully using config ${i + 1}`);
       return res.json({ 
         success: true, 
